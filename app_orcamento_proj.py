@@ -1,11 +1,35 @@
 import streamlit as st
 import pandas as pd
 
+# 1. Configuração da página deve ser o primeiro comando Streamlit
 st.set_page_config(page_title="Gerador de Orçamentos de Arquitetura", layout="wide")
 
+# 2. Função de bloqueio por senha
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == st.secrets["senha_acesso"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Limpa a senha por segurança
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.text_input("Digite a senha para acessar:", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("Digite a senha para acessar:", type="password", on_change=password_entered, key="password")
+        st.error("Senha incorreta.")
+        return False
+    return True
+
+if not check_password():
+    st.stop()  # Trava a execução do restante do código aqui
+
+# ==========================================
+# O RESTO DO SEU CÓDIGO COMEÇA AQUI
+# ==========================================
 st.title("Calculadora de Orçamentos e Projetos")
 st.write("Insira as áreas do imóvel, selecione o escopo técnico e calcule a proposta com descontos progressivos.")
-
 # 1. Metragens
 st.header("1. Metragens do Projeto")
 col1, col2 = st.columns(2)
