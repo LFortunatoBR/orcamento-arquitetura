@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import json
 import os
 from datetime import datetime
@@ -9,7 +10,7 @@ from fpdf import FPDF
 # 1. Configuração da página
 st.set_page_config(page_title="Gerador de Orçamentos de Arquitetura", layout="wide")
 
-# 2. Função de bloqueio por palavra-passe
+# 2. Função de bloqueio por senha
 def check_password():
     def password_entered():
         if st.session_state["password"] == st.secrets["senha_acesso"]:
@@ -33,7 +34,8 @@ if not check_password():
 # ==========================================
 # 3. PERSISTÊNCIA DA TABELA DE PREÇOS
 # ==========================================
-ARQUIVO_PRECOS = "config_precos.json"
+PASTA_BASE = os.path.dirname(os.path.abspath(__file__))
+ARQUIVO_PRECOS = os.path.join(PASTA_BASE, "config_precos.json")
 
 PRECOS_PADRAO = {
     "p_lev_seca": 5.0,
@@ -67,9 +69,63 @@ def salvar_precos(novos_precos):
 precos_atuais = carregar_precos()
 
 # ==========================================
-# 4. BARRA LATERAL (COM GRAVAÇÃO PERMANENTE)
+# 4. LOCALIZADOR AUTOMÁTICO DA LOGO NO GITHUB
 # ==========================================
-st.sidebar.header("Tabela de Preços (R$/un ou m²)")
+def localizar_logo():
+    extensoes_validas = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
+    candidatos_prioritarios = []
+    outros_candidatos = []
+
+    for raiz, _, arquivos in os.walk(PASTA_BASE):
+        if ".git" in raiz:
+            continue
+        for arq in arquivos:
+            nome_lower = arq.lower()
+            if nome_lower.startswith("_temp_"):
+                continue
+            if nome_lower.endswith(extensoes_validas):
+                caminho_completo = os.path.join(raiz, arq)
+                if "arq" in nome_lower or "logo" in nome_lower:
+                    candidatos_prioritarios.append(caminho_completo)
+                else:
+                    outros_candidatos.append(caminho_completo)
+
+    if candidatos_prioritarios:
+        return candidatos_prioritarios[0]
+    if outros_candidatos:
+        return outros_candidatos[0]
+    return None
+
+# ==========================================
+# 5. BARRA LATERAL (PREÇOS + IDENTIDADE VISUAL)
+# ==========================================
+st.sidebar.header("🎨 Identidade Visual do PDF")
+caminho_logo_atual = localizar_logo()
+
+opacidade_marca_dagua = st.sidebar.slider(
+    "Opacidade da Marca d'Água (%)", 
+    min_value=5, max_value=30, value=10, step=1
+)
+
+if caminho_logo_atual:
+    st.sidebar.success(f"Logo ativa: `{os.path.basename(caminho_logo_atual)}`")
+    st.sidebar.image(caminho_logo_atual, width=120)
+else:
+    st.sidebar.warning("⚠️ Nenhuma imagem de logo encontrada na pasta do GitHub.")
+
+arquivo_upload_logo = st.sidebar.file_uploader(
+    "Enviar ou substituir Logo (PNG/JPG)", 
+    type=["png", "jpg", "jpeg"]
+)
+if arquivo_upload_logo is not None:
+    caminho_salvo = os.path.join(PASTA_BASE, "arq.png")
+    img_up = Image.open(arquivo_upload_logo)
+    img_up.save(caminho_salvo, "PNG")
+    caminho_logo_atual = caminho_salvo
+    st.sidebar.success("Logo salva! Ela já sairá no PDF.")
+
+st.sidebar.divider()
+st.sidebar.header("💰 Tabela de Preços (R$/un ou m²)")
 
 p_lev_seca = st.sidebar.number_input("Levantamento - Seca (m²)", value=float(precos_atuais["p_lev_seca"]), step=1.0)
 p_lev_molhada = st.sidebar.number_input("Levantamento - Molhada (m²)", value=float(precos_atuais["p_lev_molhada"]), step=1.0)
@@ -103,7 +159,7 @@ if st.sidebar.button("💾 Salvar Preços como Padrão", use_container_width=Tru
     st.sidebar.success("Tabela de preços salva com sucesso!")
 
 # ==========================================
-# 5. INTERFACE PRINCIPAL E METRAGENS
+# 6. INTERFACE PRINCIPAL E METRAGENS
 # ==========================================
 st.title("Calculadora de Orçamentos e Propostas Técnicas")
 st.write("Configure o escopo do projeto, aplique descontos progressivos e exporte a proposta comercial em PDF.")
@@ -126,7 +182,7 @@ with col2:
 area_total = area_seca + area_molhada
 
 # ==========================================
-# 6. SELEÇÃO DE ESCOPO E REGRAS DE NEGÓCIO
+# 7. SELEÇÃO DE ESCOPO E REGRAS DE NEGÓCIO
 # ==========================================
 st.header("2. Escopo do Orçamento")
 
@@ -147,7 +203,7 @@ OPCOES_SERVICOS = [
 servicos = st.multiselect(
     "Quais serviços compõem esta proposta?",
     options=OPCOES_SERVICOS,
-    default=OPCOES_SERVICOS[:2]  # Usa sempre os 2 primeiros itens da própria lista, evitando erro de correspondência
+    default=OPCOES_SERVICOS[:2]
 )
 
 executivo_ativo = "Projeto Executivo" in servicos
@@ -174,7 +230,7 @@ with col_q2:
     qtd_vid = st.number_input("Qtd. de Vídeos Renderizados", min_value=1, value=1) if "Renderização de Vídeo" in servicos else 0
 
 # ==========================================
-# 7. CÁLCULO FINANCEIRO E PESO DE DESCONTO
+# 8. CÁLCULO FINANCEIRO E PESO DE DESCONTO
 # ==========================================
 detalhamento = []
 subtotal = 0.0
@@ -270,7 +326,7 @@ if "Renderização de Vídeo" in servicos:
     detalhamento.append({"Produto": f"Renderização de Vídeo ({qtd_vid} un.)", "Base": f"{qtd_vid} un.", "Valor (R$)": val, "Status": "Cobrado"})
 
 # ==========================================
-# 8. FECHAMENTO, DESCONTOS E INFLAÇÃO
+# 9. FECHAMENTO, DESCONTOS E INFLAÇÃO
 # ==========================================
 st.header("3. Fechamento de Valores")
 
@@ -326,40 +382,39 @@ condicoes_pagto = st.text_area(
 )
 
 # ==========================================
-# 9. GERADOR DE PDF PROFISSIONAL COM MARCA DE ÁGUA
+# 10. GERADOR DE PDF PROFISSIONAL COM MARCA D'ÁGUA
 # ==========================================
-def localizar_logo():
-    nomes_possiveis = ["arq.png", "logo arq.jpg", "logo arq.png", "logo_arq.jpg", "logo_png.png", "logo.jpg", "ARQ.png", "LOGO ARQ.jpg", "LOGO ARQ.png", "LOGO_ARQ.jpg", "LOGO_ARQ.PNG", "LOGO.png", "LOGO.jpg"]
-    arquivos_pasta = os.listdir(".")
-    for arq in arquivos_pasta:
-        if arq.lower() in nomes_possiveis:
-            return arq
-    return None
-
-def preparar_imagens_logo(caminho_logo):
+def preparar_imagens_logo(caminho_logo, opacidade_pct=10):
+    """Remove o fundo branco via matriz NumPy e gera cabeçalho nítido + marca d'água transparente."""
     img = Image.open(caminho_logo).convert("RGBA")
-    dados = list(img.getdata())
+    arr = np.array(img, dtype=np.float32)
 
-    dados_cabecalho = []
-    dados_marca_dagua = []
+    r, g, b, a = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2], arr[:, :, 3]
 
-    for r, g, b, a in dados:
-        if r > 240 and g > 240 and b > 240:
-            dados_cabecalho.append((255, 255, 255, 0))
-            dados_marca_dagua.append((255, 255, 255, 0))
-        else:
-            dados_cabecalho.append((r, g, b, a))
-            dados_marca_dagua.append((r, g, b, int(a * 0.10)))
+    # Calcula o quão distante do branco puro (255,255,255) cada pixel está
+    brilho_min = np.minimum(np.minimum(r, g), b)
+    mascara_logo = np.clip((248.0 - brilho_min) / 45.0, 0.0, 1.0) * (a / 255.0)
 
-    img_cab = Image.new("RGBA", img.size)
-    img_cab.putdata(dados_cabecalho)
-    caminho_cab = "_temp_logo_header.png"
-    img_cab.save(caminho_cab, "PNG")
+    # 1. Imagem do Cabeçalho (100% nítida e sem fundo branco)
+    cab_arr = np.zeros_like(arr, dtype=np.uint8)
+    cab_arr[:, :, 0] = r.astype(np.uint8)
+    cab_arr[:, :, 1] = g.astype(np.uint8)
+    cab_arr[:, :, 2] = b.astype(np.uint8)
+    cab_arr[:, :, 3] = (mascara_logo * 255.0).astype(np.uint8)
 
-    img_wm = Image.new("RGBA", img.size)
-    img_wm.putdata(dados_marca_dagua)
-    caminho_wm = "_temp_logo_watermark.png"
-    img_wm.save(caminho_wm, "PNG")
+    caminho_cab = os.path.join(PASTA_BASE, "_temp_logo_header.png")
+    Image.fromarray(cab_arr, mode="RGBA").save(caminho_cab, "PNG")
+
+    # 2. Imagem da Marca d'Água (Com opacidade exata configurada, padrão 10%)
+    fator_opacidade = opacidade_pct / 100.0
+    wm_arr = np.zeros_like(arr, dtype=np.uint8)
+    wm_arr[:, :, 0] = r.astype(np.uint8)
+    wm_arr[:, :, 1] = g.astype(np.uint8)
+    wm_arr[:, :, 2] = b.astype(np.uint8)
+    wm_arr[:, :, 3] = (mascara_logo * 255.0 * fator_opacidade).astype(np.uint8)
+
+    caminho_wm = os.path.join(PASTA_BASE, "_temp_logo_watermark.png")
+    Image.fromarray(wm_arr, mode="RGBA").save(caminho_wm, "PNG")
 
     return caminho_cab, caminho_wm
 
@@ -377,24 +432,23 @@ class PropostaPDF(FPDF):
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self):
-        if self.logo_watermark and os.path.exists(self.logo_watermark):
-            self.image(self.logo_watermark, x=35, y=78, w=140)
-
+        # Faixa superior institucional (Verde Petróleo #006863)
         self.set_fill_color(0, 104, 99)
         self.rect(0, 0, 210, 6, style="F")
 
+        # Logo nítida no cabeçalho à esquerda
         if self.logo_header and os.path.exists(self.logo_header):
-            self.image(self.logo_header, x=14, y=11, w=24)
-            self_x_titulo = 42
+            self.image(self.logo_header, x=14, y=10, w=26)
+            x_titulo = 44
         else:
-            self_x_titulo = 14
+            x_titulo = 14
 
-        self.set_xy(self_x_titulo, 13)
+        self.set_xy(x_titulo, 13)
         self.set_font("Helvetica", "B", 16)
         self.set_text_color(0, 74, 70)
         self.cell(0, 8, limpar_texto_pdf("PROPOSTA TÉCNICA E COMERCIAL"), new_x="LMARGIN", new_y="NEXT")
 
-        self.set_x(self_x_titulo)
+        self.set_x(x_titulo)
         self.set_font("Helvetica", "", 10)
         self.set_text_color(90, 100, 100)
         self.cell(0, 5, limpar_texto_pdf("Arquitetura, Engenharia Complementar e Modelagem 3D"), new_x="LMARGIN", new_y="NEXT")
@@ -405,6 +459,10 @@ class PropostaPDF(FPDF):
         self.ln(12)
 
     def footer(self):
+        # A marca d'água é estampada aqui para não ser coberta pelo fundo sólido das tabelas
+        if self.logo_watermark and os.path.exists(self.logo_watermark):
+            self.image(self.logo_watermark, x=32, y=75, w=146)
+
         self.set_y(-15)
         self.set_draw_color(0, 104, 99)
         self.set_line_width(0.3)
@@ -414,14 +472,13 @@ class PropostaPDF(FPDF):
         data_hoje = datetime.now().strftime("%d/%m/%Y")
         self.cell(0, 10, limpar_texto_pdf(f"Proposta gerada em {data_hoje} | Página {self.page_no()}"), align="R")
 
-def gerar_pdf_orcamento():
-    caminho_logo = localizar_logo()
+def gerar_pdf_orcamento(caminho_logo, opacidade_pct):
     logo_cab, logo_wm = (None, None)
-    if caminho_logo:
+    if caminho_logo and os.path.exists(caminho_logo):
         try:
-            logo_cab, logo_wm = preparar_imagens_logo(caminho_logo)
-        except Exception:
-            pass
+            logo_cab, logo_wm = preparar_imagens_logo(caminho_logo, opacidade_pct=opacidade_pct)
+        except Exception as e:
+            st.error(f"Erro ao processar a imagem da logo: {e}")
 
     pdf = PropostaPDF(logo_header=logo_cab, logo_watermark=logo_wm)
     pdf.add_page()
@@ -531,7 +588,7 @@ def gerar_pdf_orcamento():
 
 st.header("4. Exportação Comercial")
 if detalhamento:
-    bytes_pdf = gerar_pdf_orcamento()
+    bytes_pdf = gerar_pdf_orcamento(caminho_logo_atual, opacidade_marca_dagua)
     nome_arq_pdf = f"Proposta_{nome_cliente.strip().replace(' ', '_')}.pdf"
     st.download_button(
         label="📄 Baixar Proposta Comercial em PDF (Com Marca d'Água)",
