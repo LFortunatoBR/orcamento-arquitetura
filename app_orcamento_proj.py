@@ -30,6 +30,7 @@ if not check_password():
 # ==========================================
 st.title("Calculadora de Orçamentos e Projetos")
 st.write("Insira as áreas do imóvel, selecione o escopo técnico e calcule a proposta com descontos progressivos.")
+
 # 1. Metragens
 st.header("1. Metragens do Projeto")
 col1, col2 = st.columns(2)
@@ -85,7 +86,7 @@ if "Desenho CAD" in servicos:
 if "Cortes" in servicos:
     val = area_total * p_cortes
     subtotal += val
-    detalhamento.append({"Produto": "Cortes, "Base": f"{area_total} m²", "Valor (R$)": val})
+    detalhamento.append({"Produto": "Cortes", "Base": f"{area_total} m²", "Valor (R$)": val})
 if "Fachadas" in servicos:
     val = area_total * p_fachadas
     subtotal += val
