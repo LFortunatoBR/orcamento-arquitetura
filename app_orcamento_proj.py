@@ -85,11 +85,11 @@ if "Desenho CAD" in servicos:
 if "Cortes" in servicos:
     val = area_total * p_cortes
     subtotal += val
-    detalhamento.append({"Produto": "Cortes, "Base": f"{area_total}", "Valor (R$)": val})
+    detalhamento.append({"Produto": "Cortes, "Base": f"{area_total} m²", "Valor (R$)": val})
 if "Fachadas" in servicos:
     val = area_total * p_fachadas
     subtotal += val
-    detalhamento.append({"Produto": "Fachadas", "Base": f"{area_total}", "Valor (R$)": val})
+    detalhamento.append({"Produto": "Fachadas", "Base": f"{area_total} m²", "Valor (R$)": val})
 if "Projeto de Arquitetura" in servicos:
     val = area_total * p_arq
     subtotal += val
