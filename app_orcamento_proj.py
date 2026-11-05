@@ -42,10 +42,10 @@ area_total = area_seca + area_molhada
 
 # 2. Tabela de Preços Base (Painel Lateral)
 st.sidebar.header("Tabela de Preços (R$/un ou m²)")
-p_lev_seca = st.sidebar.number_input("Levantamento - Seca", value=8.0)
-p_lev_molhada = st.sidebar.number_input("Levantamento - Molhada", value=12.0)
+p_lev_seca = st.sidebar.number_input("Levantamento - Seca", value=5.0)
+p_lev_molhada = st.sidebar.number_input("Levantamento - Molhada", value=10.0)
 p_cad = st.sidebar.number_input("Desenho CAD (m²)", value=10.0)
-p_arq = st.sidebar.number_input("Projeto de Arquitetura (m²)", value=25.0)
+p_arq = st.sidebar.number_input("Projeto de Arquitetura (m²)", value=20.0)
 p_exec = st.sidebar.number_input("Projeto Executivo (m²)", value=75.0)
 p_maq = st.sidebar.number_input("Maquete Gráfica (m²)", value=30.0)
 p_ele = st.sidebar.number_input("Proj. Elétrica/Ilum. (m²)", value=25.0)
