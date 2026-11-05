@@ -26,10 +26,10 @@ if not check_password():
     st.stop()  # Trava a execução do restante do código aqui
 
 # ==========================================
-# O RESTO DO SEU CÓDIGO COMEÇA AQUI
+# INTERFACE PRINCIPAL
 # ==========================================
 st.title("Calculadora de Orçamentos e Projetos")
-st.write("Insira as áreas do imóvel, selecione o escopo técnico e calcule a proposta com descontos progressivos.")
+st.write("Insira as áreas do imóvel, selecione o escopo técnico e calcule a proposta com descontos progressivos e reajuste inflacionário.")
 
 # 1. Metragens
 st.header("1. Metragens do Projeto")
@@ -120,7 +120,7 @@ if "Renderização de Vídeo" in servicos:
     subtotal += val
     detalhamento.append({"Produto": f"Render de Vídeo ({qtd_vid}x)", "Base": "Unidade", "Valor (R$)": val})
 
-# 5. Aplicação de Descontos
+# 5. Aplicação de Descontos e Reajuste de Inflação
 st.header("3. Fechamento de Valores")
 qnt_servicos = len(servicos)
 desconto_perc = 0.0
@@ -133,12 +133,39 @@ elif qnt_servicos >= 2:
     desconto_perc = 0.05  # 5% para junções básicas
 
 valor_desconto = subtotal * desconto_perc
-valor_final = subtotal - valor_desconto
+valor_com_desconto = subtotal - valor_desconto
 
 if detalhamento:
     st.dataframe(pd.DataFrame(detalhamento), use_container_width=True)
 
-col3, col4, col5 = st.columns(3)
-col3.metric("Subtotal", f"R$ {subtotal:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-col4.metric(f"Desconto ({int(desconto_perc * 100)}%)", f"- R$ {valor_desconto:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-col5.metric("Valor Final", f"R$ {valor_final:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+# Controle de Reajuste Inflacionário
+st.subheader("Reajuste Anual de Inflação")
+col_inf1, col_inf2 = st.columns([1, 2])
+with col_inf1:
+    aplicar_inflacao = st.checkbox("Aplicar correção inflacionária?", value=False)
+with col_inf2:
+    inflacao_anual = st.number_input(
+        "Índice acumulado do ano anterior (% - Ex: IPCA, INCC, IGP-M)", 
+        min_value=0.0, 
+        max_value=100.0, 
+        value=4.50, 
+        step=0.10,
+        disabled=not aplicar_inflacao
+    )
+
+acrescimo_inflacao = valor_com_desconto * (inflacao_anual / 100.0) if aplicar_inflacao else 0.0
+valor_final_reajustado = valor_com_desconto + acrescimo_inflacao
+
+# Função auxiliar para formatar moeda no padrão brasileiro (R$)
+def formatar_moeda(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+# Exibição das Métricas Finais
+col3, col4, col5, col6 = st.columns(4)
+col3.metric("Subtotal", formatar_moeda(subtotal))
+col4.metric(f"Desconto ({int(desconto_perc * 100)}%)", f"- {formatar_moeda(valor_desconto)}")
+col5.metric(
+    f"Inflação ({inflacao_anual:.2f}%)" if aplicar_inflacao else "Inflação (0%)", 
+    f"+ {formatar_moeda(acrescimo_inflacao)}"
+)
+col6.metric("Valor Final", formatar_moeda(valor_final_reajustado))
