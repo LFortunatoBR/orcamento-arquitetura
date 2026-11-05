@@ -341,6 +341,8 @@ else:
 
 if detalhamento:
     st.dataframe(pd.DataFrame(detalhamento), use_container_width=True, hide_index=True)
+else:
+    st.warning("⚠️ Nenhum serviço selecionado no escopo.")
 
 col_d1, col_d2 = st.columns(2)
 with col_d1:
@@ -380,6 +382,20 @@ condicoes_pagto = st.text_area(
     "Condições de Pagamento e Observações da Proposta (Sairão no PDF):",
     value="• 30% de sinal na assinatura do contrato e saldo parcelado conforme entregas técnicas.\n• Prazo de início imediato após confirmação e levantamento métrico."
 )
+
+st.header("4. Exportação Comercial")
+if detalhamento:
+    bytes_pdf = gerar_pdf_orcamento(caminho_logo_atual, opacidade_marca_dagua)
+    nome_arq_pdf = f"Proposta_{nome_cliente.strip().replace(' ', '_')}.pdf"
+    st.download_button(
+        label="📄 Baixar Proposta Comercial em PDF (Com Marca d'Água)",
+        data=bytes_pdf,
+        file_name=nome_arq_pdf,
+        mime="application/pdf",
+        use_container_width=True
+    )
+else:
+    st.warning("Selecione pelo menos um serviço para habilitar a geração do PDF.")
 
 # ==========================================
 # 10. GERADOR DE PDF PROFISSIONAL COM MARCA D'ÁGUA
