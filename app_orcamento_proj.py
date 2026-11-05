@@ -10,23 +10,29 @@ from fpdf import FPDF
 # 1. Configuração da página
 st.set_page_config(page_title="Gerador de Orçamentos de Arquitetura", layout="wide")
 
-# 2. Função de bloqueio por senha
+# 2. Função de bloqueio por senha (à prova de KeyError)
 def check_password():
+    if st.session_state.get("password_correct", False):
+        return True
+
     def password_entered():
-        if st.session_state["password"] == st.secrets["senha_acesso"]:
+        senha_digitada = st.session_state.get("password", "")
+        senha_correta = st.secrets.get("senha_acesso", "")
+        if senha_digitada and senha_digitada == senha_correta:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]
+            st.session_state.pop("password", None)  # Limpa sem risco de KeyError
         else:
             st.session_state["password_correct"] = False
 
-    if "password_correct" not in st.session_state:
-        st.text_input("Digite a senha para acessar:", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.text_input("Digite a senha para acessar:", type="password", on_change=password_entered, key="password")
+    st.text_input(
+        "Digite a senha para acessar:",
+        type="password",
+        on_change=password_entered,
+        key="password"
+    )
+    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
         st.error("Senha incorreta.")
-        return False
-    return True
+    return False
 
 if not check_password():
     st.stop()
