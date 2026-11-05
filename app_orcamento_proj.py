@@ -20,7 +20,7 @@ def check_password():
         senha_correta = st.secrets.get("senha_acesso", "")
         if senha_digitada and senha_digitada == senha_correta:
             st.session_state["password_correct"] = True
-            st.session_state.pop("password", None)
+            st.session_state.pop("password", None)  # Limpa sem risco de KeyError
         else:
             st.session_state["password_correct"] = False
 
