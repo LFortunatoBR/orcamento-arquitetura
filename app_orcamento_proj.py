@@ -45,11 +45,13 @@ st.sidebar.header("Tabela de Preços (R$/un ou m²)")
 p_lev_seca = st.sidebar.number_input("Levantamento - Seca", value=5.0)
 p_lev_molhada = st.sidebar.number_input("Levantamento - Molhada", value=10.0)
 p_cad = st.sidebar.number_input("Desenho CAD (m²)", value=10.0)
+p_cortes = st.sidebar.number_input("Cortes", value=10.0)
+p_fachadas = st.sidebar.number_input("Cortes", value=10.0)
 p_arq = st.sidebar.number_input("Projeto de Arquitetura (m²)", value=20.0)
 p_exec = st.sidebar.number_input("Projeto Executivo (m²)", value=75.0)
 p_maq = st.sidebar.number_input("Maquete Gráfica (m²)", value=30.0)
 p_ele = st.sidebar.number_input("Proj. Elétrica/Ilum. (m²)", value=25.0)
-p_hidro = st.sidebar.number_input("Proj. Hidrossanitário (m² Área Molhada)", value=40.0)
+p_hidro = st.sidebar.number_input("Proj. Hidrossanitário (m² Área Molhada)", value=45.0)
 p_render_img = st.sidebar.number_input("Render Imagem (un)", value=100.0)
 p_render_vid = st.sidebar.number_input("Render Vídeo (un)", value=600.0)
 
@@ -58,7 +60,7 @@ st.header("2. Escopo do Orçamento")
 servicos = st.multiselect(
     "Quais serviços compõem esta proposta?",
     [
-        "Levantamento Técnico", "Desenho CAD", "Projeto de Arquitetura", "Projeto Executivo", 
+        "Levantamento Técnico", "Desenho CAD", "Cortes", "Fachadas", "Projeto de Arquitetura", "Projeto Executivo", 
         "Maquete Gráfica", "Proj. Elétrica e Iluminação", 
         "Proj. Hidrossanitário", "Renderização de Imagens", "Renderização de Vídeo"
     ],
@@ -80,6 +82,14 @@ if "Desenho CAD" in servicos:
     val = area_total * p_cad
     subtotal += val
     detalhamento.append({"Produto": "Desenho CAD", "Base": f"{area_total} m²", "Valor (R$)": val})
+if "Cortes" in servicos:
+    val = area_total * p_cortes
+    subtotal += val
+    detalhamento.append({"Produto": "Cortes, "Base": f"{area_total} m²", "Valor (R$)": val})
+if "Fachadas" in servicos:
+    val = area_total * p_fachadas
+    subtotal += val
+    detalhamento.append({"Produto": "Fachadas", "Base": f"{area_total} m²", "Valor (R$)": val})
 if "Projeto de Arquitetura" in servicos:
     val = area_total * p_arq
     subtotal += val
