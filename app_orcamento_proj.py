@@ -46,7 +46,7 @@ p_lev_seca = st.sidebar.number_input("Levantamento - Seca", value=5.0)
 p_lev_molhada = st.sidebar.number_input("Levantamento - Molhada", value=10.0)
 p_cad = st.sidebar.number_input("Desenho CAD (m²)", value=10.0)
 p_cortes = st.sidebar.number_input("Cortes", value=10.0)
-p_fachadas = st.sidebar.number_input("Cortes", value=10.0)
+p_fachadas = st.sidebar.number_input("Fachadas", value=10.0)
 p_arq = st.sidebar.number_input("Projeto de Arquitetura (m²)", value=20.0)
 p_exec = st.sidebar.number_input("Projeto Executivo (m²)", value=75.0)
 p_maq = st.sidebar.number_input("Maquete Gráfica (m²)", value=30.0)
@@ -89,11 +89,11 @@ if "Cortes" in servicos:
 if "Fachadas" in servicos:
     val = area_total * p_fachadas
     subtotal += val
-    detalhamento.append({"Produto": "Fachadas", "Base": f"{area_total} m²", "Valor (R$)": val})
+    detalhamento.append({"Produto": "Fachadas", "Base": f"{area_total}", "Valor (R$)": val})
 if "Projeto de Arquitetura" in servicos:
     val = area_total * p_arq
     subtotal += val
-    detalhamento.append({"Produto": "Projeto de Arquitetura", "Base": f"{area_total} m²", "Valor (R$)": val})
+    detalhamento.append({"Produto": "Projeto de Arquitetura", "Base": f"{area_total}", "Valor (R$)": val})
 if "Projeto Executivo" in servicos:
     val = area_total * p_exec
     subtotal += val
