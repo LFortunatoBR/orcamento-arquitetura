@@ -383,7 +383,7 @@ class PropostaPDF(FPDF):
         # 3. Logo nítida no cabeçalho
         if self.logo_header and os.path.exists(self.logo_header):
             self.image(self.logo_header, x=14, y=11, w=24)
-             self_x_titulo = 42
+            self_x_titulo = 42
         else:
             self_x_titulo = 14
 
