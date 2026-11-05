@@ -20,7 +20,7 @@ def check_password():
         senha_correta = st.secrets.get("senha_acesso", "")
         if senha_digitada and senha_digitada == senha_correta:
             st.session_state["password_correct"] = True
-            st.session_state.pop("password", None)  # Limpa sem risco de KeyError
+            st.session_state.pop("password", None)
         else:
             st.session_state["password_correct"] = False
 
@@ -46,7 +46,7 @@ ARQUIVO_PRECOS = os.path.join(PASTA_BASE, "config_precos.json")
 PRECOS_PADRAO = {
     "p_lev_seca": 5.0,
     "p_lev_molhada": 10.0,
-    "p_cad": 7.0,
+    "p_cad": 10.0,
     "p_cortes": 10.0,
     "p_fachadas": 10.0,
     "p_arq": 20.0,
@@ -135,7 +135,7 @@ st.sidebar.header("💰 Tabela de Preços (R$/un ou m²)")
 
 p_lev_seca = st.sidebar.number_input("Levantamento - Seca (m²)", value=float(precos_atuais["p_lev_seca"]), step=1.0)
 p_lev_molhada = st.sidebar.number_input("Levantamento - Molhada (m²)", value=float(precos_atuais["p_lev_molhada"]), step=1.0)
-p_cad = st.sidebar.number_input("Desenho Levantamento CAD (m²)", value=float(precos_atuais["p_cad"]), step=1.0)
+p_cad = st.sidebar.number_input("Desenho CAD (m²)", value=float(precos_atuais["p_cad"]), step=1.0)
 p_cortes = st.sidebar.number_input("Cortes Avulsos (m²)", value=float(precos_atuais["p_cortes"]), step=1.0)
 p_fachadas = st.sidebar.number_input("Fachadas Avulsas (m²)", value=float(precos_atuais["p_fachadas"]), step=1.0)
 p_arq = st.sidebar.number_input("Projeto de Arquitetura (m²)", value=float(precos_atuais["p_arq"]), step=1.0)
@@ -194,7 +194,7 @@ st.header("2. Escopo do Orçamento")
 
 OPCOES_SERVICOS = [
     "Levantamento Técnico",
-    "Desenho Levantamento CAD",
+    "Desenho CAD",
     "Cortes",
     "Fachadas",
     "Projeto de Arquitetura",
@@ -248,11 +248,11 @@ if "Levantamento Técnico" in servicos:
     pontos_desconto += 1.0
     detalhamento.append({"Produto": "Levantamento Técnico", "Base": f"{area_seca}m² Seca + {area_molhada}m² Molhada", "Valor (R$)": val, "Status": "Cobrado"})
 
-if "Desenho Levantamento CAD" in servicos:
+if "Desenho CAD" in servicos:
     val = area_total * p_cad
     subtotal += val
     pontos_desconto += 1.0
-    detalhamento.append({"Produto": "Desenho Levantamento CAD (Digitalização)", "Base": f"{area_total} m²", "Valor (R$)": val, "Status": "Cobrado"})
+    detalhamento.append({"Produto": "Desenho CAD (Digitalização)", "Base": f"{area_total} m²", "Valor (R$)": val, "Status": "Cobrado"})
 
 if "Cortes" in servicos:
     if arq_ativo and not cobrar_cortes_fachadas:
@@ -391,17 +391,14 @@ condicoes_pagto = st.text_area(
 # 10. GERADOR DE PDF PROFISSIONAL COM MARCA D'ÁGUA
 # ==========================================
 def preparar_imagens_logo(caminho_logo, opacidade_pct=10):
-    """Remove o fundo branco via matriz NumPy e gera cabeçalho nítido + marca d'água transparente."""
     img = Image.open(caminho_logo).convert("RGBA")
     arr = np.array(img, dtype=np.float32)
 
     r, g, b, a = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2], arr[:, :, 3]
 
-    # Calcula o quão distante do branco puro (255,255,255) cada pixel está
     brilho_min = np.minimum(np.minimum(r, g), b)
     mascara_logo = np.clip((248.0 - brilho_min) / 45.0, 0.0, 1.0) * (a / 255.0)
 
-    # 1. Imagem do Cabeçalho (100% nítida e sem fundo branco)
     cab_arr = np.zeros_like(arr, dtype=np.uint8)
     cab_arr[:, :, 0] = r.astype(np.uint8)
     cab_arr[:, :, 1] = g.astype(np.uint8)
@@ -411,7 +408,6 @@ def preparar_imagens_logo(caminho_logo, opacidade_pct=10):
     caminho_cab = os.path.join(PASTA_BASE, "_temp_logo_header.png")
     Image.fromarray(cab_arr, mode="RGBA").save(caminho_cab, "PNG")
 
-    # 2. Imagem da Marca d'Água (Com opacidade exata configurada, padrão 10%)
     fator_opacidade = opacidade_pct / 100.0
     wm_arr = np.zeros_like(arr, dtype=np.uint8)
     wm_arr[:, :, 0] = r.astype(np.uint8)
@@ -438,11 +434,9 @@ class PropostaPDF(FPDF):
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self):
-        # Faixa superior institucional (Verde Petróleo #006863)
         self.set_fill_color(0, 104, 99)
         self.rect(0, 0, 210, 6, style="F")
 
-        # Logo nítida no cabeçalho à esquerda
         if self.logo_header and os.path.exists(self.logo_header):
             self.image(self.logo_header, x=14, y=10, w=26)
             x_titulo = 44
@@ -465,7 +459,6 @@ class PropostaPDF(FPDF):
         self.ln(12)
 
     def footer(self):
-        # A marca d'água é estampada aqui para não ser coberta pelo fundo sólido das tabelas
         if self.logo_watermark and os.path.exists(self.logo_watermark):
             self.image(self.logo_watermark, x=32, y=75, w=146)
 
