@@ -10,31 +10,25 @@ from fpdf import FPDF
 # 1. Configuração da página
 st.set_page_config(page_title="Gerador de Orçamentos de Arquitetura", layout="wide")
 
-# 2. Função de bloqueio por senha (à prova de KeyError)
-def check_password():
-    if st.session_state.get("password_correct", False):
-        return True
+# 2. Controle de Sessão e Autenticação Definitivo
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
 
-    def password_entered():
-        senha_digitada = st.session_state.get("password", "")
-        senha_correta = st.secrets.get("senha_acesso", "")
-        if senha_digitada and senha_digitada == senha_correta:
-            st.session_state["password_correct"] = True
-            st.session_state.pop("password", None)  # Limpa sem risco de KeyError
-        else:
-            st.session_state["password_correct"] = False
+def verificar_senha():
+    senha_digitada = st.session_state.get("input_senha", "")
+    senha_correta = st.secrets.get("senha_acesso", "1234") # Fallback de segurança caso o secret não carregue
+    if senha_digitada == senha_correta:
+        st.session_state["autenticado"] = True
+    else:
+        st.session_state["autenticado"] = False
+        st.session_state["erro_login"] = True
 
-    st.text_input(
-        "Digite a senha para acessar:",
-        type="password",
-        on_change=password_entered,
-        key="password"
-    )
-    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+if not st.session_state["autenticado"]:
+    st.markdown("### Acesso Restrito")
+    st.text_input("Digite a senha para acessar:", type="password", key="input_senha", on_change=verificar_senha)
+    
+    if st.session_state.get("erro_login", False):
         st.error("Senha incorreta.")
-    return False
-
-if not check_password():
     st.stop()
 
 # ==========================================
