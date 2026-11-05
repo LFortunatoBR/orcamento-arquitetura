@@ -329,7 +329,7 @@ condicoes_pagto = st.text_area(
 # 9. GERADOR DE PDF PROFISSIONAL COM MARCA DE ÁGUA
 # ==========================================
 def localizar_logo():
-    nomes_possiveis = ["arq.png", "logo arq.jpg", "logo_arq.png", "logo_arq.jpg", "logo.png", "logo.jpg"]
+    nomes_possiveis = ["arq.png", "logo arq.jpg", "logo_arq.png", "logo_arq.jpg", "logo.png", "logo.jpg", "ARQ.png", "LOGO ARQ.jpg", "LOGO_ARQ.png", "LOGO_ARQ.jpg", "LOGO.png", "LOGO.jpg"]
     arquivos_pasta = os.listdir(".")
     for arq in arquivos_pasta:
         if arq.lower() in nomes_possiveis:
