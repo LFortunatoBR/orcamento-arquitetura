@@ -9,7 +9,7 @@ from fpdf import FPDF
 # 1. Configuração da página
 st.set_page_config(page_title="Gerador de Orçamentos de Arquitetura", layout="wide")
 
-# 2. Função de bloqueio por senha
+# 2. Função de bloqueio por palavra-passe
 def check_password():
     def password_entered():
         if st.session_state["password"] == st.secrets["senha_acesso"]:
@@ -67,7 +67,7 @@ def salvar_precos(novos_precos):
 precos_atuais = carregar_precos()
 
 # ==========================================
-# 4. BARRA LATERAL (COM SALVAMENTO PERMANENTE)
+# 4. BARRA LATERAL (COM GRAVAÇÃO PERMANENTE)
 # ==========================================
 st.sidebar.header("Tabela de Preços (R$/un ou m²)")
 
@@ -129,15 +129,25 @@ area_total = area_seca + area_molhada
 # 6. SELEÇÃO DE ESCOPO E REGRAS DE NEGÓCIO
 # ==========================================
 st.header("2. Escopo do Orçamento")
+
+OPCOES_SERVICOS = [
+    "Levantamento Técnico",
+    "Desenho Levantamento CAD",
+    "Cortes",
+    "Fachadas",
+    "Projeto de Arquitetura",
+    "Projeto Executivo",
+    "Maquete Gráfica",
+    "Proj. Elétrica e Iluminação",
+    "Proj. Hidrossanitário",
+    "Renderização de Imagens",
+    "Renderização de Vídeo"
+]
+
 servicos = st.multiselect(
     "Quais serviços compõem esta proposta?",
-    [
-        "Levantamento Técnico", "Desenho Levantamento CAD", "Cortes", "Fachadas", 
-        "Projeto de Arquitetura", "Projeto Executivo", 
-        "Maquete Gráfica", "Proj. Elétrica e Iluminação", 
-        "Proj. Hidrossanitário", "Renderização de Imagens", "Renderização de Vídeo"
-    ],
-    default=["Levantamento Técnico", "Desenho CAD"]
+    options=OPCOES_SERVICOS,
+    default=OPCOES_SERVICOS[:2]  # Usa sempre os 2 primeiros itens da própria lista, evitando erro de correspondência
 )
 
 executivo_ativo = "Projeto Executivo" in servicos
@@ -150,7 +160,6 @@ if executivo_ativo:
         "O **Projeto de Arquitetura** permanece independente."
     )
 
-# Tratamento de sobreposição opcional para Cortes e Fachadas quando Arquitetura está ativo
 cobrar_cortes_fachadas = True
 if arq_ativo and ("Cortes" in servicos or "Fachadas" in servicos):
     cobrar_cortes_fachadas = st.checkbox(
@@ -181,7 +190,7 @@ if "Desenho Levantamento CAD" in servicos:
     val = area_total * p_cad
     subtotal += val
     pontos_desconto += 1.0
-    detalhamento.append({"Produto": "Desenho CAD (Digitalização)", "Base": f"{area_total} m²", "Valor (R$)": val, "Status": "Cobrado"})
+    detalhamento.append({"Produto": "Desenho Levantamento CAD (Digitalização)", "Base": f"{area_total} m²", "Valor (R$)": val, "Status": "Cobrado"})
 
 if "Cortes" in servicos:
     if arq_ativo and not cobrar_cortes_fachadas:
@@ -210,7 +219,7 @@ if "Projeto de Arquitetura" in servicos:
 if "Projeto Executivo" in servicos:
     val = area_total * p_exec
     subtotal += val
-    pontos_desconto += 3.0  # Engloba Detalhamento Executivo + Elétrica/Iluminação + Hidrossanitário
+    pontos_desconto += 3.0
     detalhamento.append({
         "Produto": "Projeto Executivo Completo", 
         "Base": f"{area_total} m²", 
@@ -317,7 +326,7 @@ condicoes_pagto = st.text_area(
 )
 
 # ==========================================
-# 9. GERADOR DE PDF PROFISSIONAL COM MARCA D'ÁGUA
+# 9. GERADOR DE PDF PROFISSIONAL COM MARCA DE ÁGUA
 # ==========================================
 def localizar_logo():
     nomes_possiveis = ["arq.png", "logo arq.jpg", "logo_arq.png", "logo_arq.jpg", "logo.png", "logo.jpg"]
@@ -328,21 +337,18 @@ def localizar_logo():
     return None
 
 def preparar_imagens_logo(caminho_logo):
-    """Cria uma versão limpa da logo para o cabeçalho e uma marca d'água com 10% de opacidade."""
     img = Image.open(caminho_logo).convert("RGBA")
-    dados = img.getdata()
+    dados = list(img.getdata())
 
     dados_cabecalho = []
     dados_marca_dagua = []
 
     for r, g, b, a in dados:
-        # Remove o fundo branco (pixels claros > 240) deixando transparente
         if r > 240 and g > 240 and b > 240:
             dados_cabecalho.append((255, 255, 255, 0))
             dados_marca_dagua.append((255, 255, 255, 0))
         else:
             dados_cabecalho.append((r, g, b, a))
-            # Aplica exatamente 10% de opacidade nos pixels da logo
             dados_marca_dagua.append((r, g, b, int(a * 0.10)))
 
     img_cab = Image.new("RGBA", img.size)
@@ -358,7 +364,6 @@ def preparar_imagens_logo(caminho_logo):
     return caminho_cab, caminho_wm
 
 def limpar_texto_pdf(texto):
-    """Garante compatibilidade com fontes padrão Latin-1 do FPDF."""
     substituicoes = {"↳": "->", "•": "-", "—": "-", "–": "-"}
     for k, v in substituicoes.items():
         texto = texto.replace(k, v)
@@ -372,15 +377,12 @@ class PropostaPDF(FPDF):
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self):
-        # 1. Marca d'água centralizada em todas as páginas (10% opacidade)
         if self.logo_watermark and os.path.exists(self.logo_watermark):
             self.image(self.logo_watermark, x=35, y=78, w=140)
 
-        # 2. Faixa superior institucional (Verde Petróleo da Logo #006863)
         self.set_fill_color(0, 104, 99)
         self.rect(0, 0, 210, 6, style="F")
 
-        # 3. Logo nítida no cabeçalho
         if self.logo_header and os.path.exists(self.logo_header):
             self.image(self.logo_header, x=14, y=11, w=24)
             self_x_titulo = 42
@@ -389,7 +391,7 @@ class PropostaPDF(FPDF):
 
         self.set_xy(self_x_titulo, 13)
         self.set_font("Helvetica", "B", 16)
-        self.set_text_color(0, 74, 70)  # Verde Petróleo Escuro (#004A46)
+        self.set_text_color(0, 74, 70)
         self.cell(0, 8, limpar_texto_pdf("PROPOSTA TÉCNICA E COMERCIAL"), new_x="LMARGIN", new_y="NEXT")
 
         self.set_x(self_x_titulo)
@@ -397,7 +399,6 @@ class PropostaPDF(FPDF):
         self.set_text_color(90, 100, 100)
         self.cell(0, 5, limpar_texto_pdf("Arquitetura, Engenharia Complementar e Modelagem 3D"), new_x="LMARGIN", new_y="NEXT")
 
-        # Linha divisória fina
         self.set_draw_color(0, 104, 99)
         self.set_line_width(0.4)
         self.line(14, 36, 196, 36)
@@ -425,8 +426,7 @@ def gerar_pdf_orcamento():
     pdf = PropostaPDF(logo_header=logo_cab, logo_watermark=logo_wm)
     pdf.add_page()
 
-    # --- Bloco 1: Dados do Cliente e Metragens ---
-    pdf.set_fill_color(234, 244, 243)  # Verde Água Suave (#EAF4F3)
+    pdf.set_fill_color(234, 244, 243)
     pdf.set_draw_color(0, 104, 99)
     pdf.rect(14, 40, 182, 24, style="DF")
 
@@ -451,13 +451,11 @@ def gerar_pdf_orcamento():
 
     pdf.ln(8)
 
-    # --- Bloco 2: Tabela de Escopo ---
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(0, 74, 70)
     pdf.cell(0, 8, limpar_texto_pdf("1. Detalhamento do Escopo Técnico e Investimento"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(1)
 
-    # Cabeçalho da Tabela
     pdf.set_fill_color(0, 104, 99)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 9.5)
@@ -466,7 +464,6 @@ def gerar_pdf_orcamento():
     pdf.cell(32, 8, limpar_texto_pdf("Condição"), border=0, fill=True, align="C")
     pdf.cell(30, 8, limpar_texto_pdf("Valor (R$)  "), border=0, fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
 
-    # Linhas da Tabela
     pdf.set_font("Helvetica", "", 9)
     for i, item in enumerate(detalhamento):
         if i % 2 == 0:
@@ -493,7 +490,6 @@ def gerar_pdf_orcamento():
 
     pdf.ln(6)
 
-    # --- Bloco 3: Resumo Financeiro ---
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(0, 74, 70)
     pdf.cell(0, 8, limpar_texto_pdf("2. Resumo Financeiro da Proposta"), new_x="LMARGIN", new_y="NEXT")
@@ -515,7 +511,6 @@ def gerar_pdf_orcamento():
         pdf.cell(42, 7, limpar_texto_pdf(f"+ {formatar_moeda(acrescimo_inflacao)}"), align="R", new_x="LMARGIN", new_y="NEXT")
 
     pdf.ln(2)
-    # Faixa de Valor Final
     pdf.set_fill_color(0, 104, 99)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 12)
@@ -524,7 +519,6 @@ def gerar_pdf_orcamento():
 
     pdf.ln(8)
 
-    # --- Bloco 4: Condições Comerciais ---
     if condicoes_pagto.strip():
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(0, 74, 70)
