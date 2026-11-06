@@ -1,4 +1,6 @@
 streamlit
 pandas
+numpy
 fpdf2
 Pillow
+argon2-cffi
