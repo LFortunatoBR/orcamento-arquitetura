@@ -138,10 +138,9 @@ def localizar_logo():
 
 @st.cache_data(show_spinner=False)
 def preparar_imagens_logo(caminho_logo, opacidade_pct=10, mtime_arquivo=0.0):
-    """Processa a logo uma única vez em cache para evitar lentidão ou queda do app a cada clique."""
+    """Remove o fundo branco, recorta as margens vazias para maximizar a logo e gera cabeçalho + marca d'água."""
     img = Image.open(caminho_logo).convert("RGBA")
-    # Redimensiona se for muito grande para poupar memória RAM no Streamlit Cloud
-    img.thumbnail((900, 900), Image.Resampling.LANCZOS)
+    img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
     arr = np.array(img, dtype=np.float32)
 
     r, g, b, a = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2], arr[:, :, 3]
@@ -149,8 +148,21 @@ def preparar_imagens_logo(caminho_logo, opacidade_pct=10, mtime_arquivo=0.0):
     brilho_min = np.minimum(np.minimum(r, g), b)
     mascara_logo = np.clip((248.0 - brilho_min) / 45.0, 0.0, 1.0) * (a / 255.0)
 
+    # Recorta automaticamente toda a margem branca/transparente ao redor do desenho da logo
+    ys, xs = np.where(mascara_logo > 0.05)
+    if len(xs) > 0 and len(ys) > 0:
+        y_min, y_max = max(0, int(ys.min()) - 4), min(arr.shape[0], int(ys.max()) + 5)
+        x_min, x_max = max(0, int(xs.min()) - 4), min(arr.shape[1], int(xs.max()) + 5)
+        r = r[y_min:y_max, x_min:x_max]
+        g = g[y_min:y_max, x_min:x_max]
+        b = b[y_min:y_max, x_min:x_max]
+        mascara_logo = mascara_logo[y_min:y_max, x_min:x_max]
+
+    h_crop, w_crop = mascara_logo.shape
+    proporcao_h_w = h_crop / float(w_crop) if w_crop > 0 else 1.0
+
     # 1. Cabeçalho nítido sem fundo branco
-    cab_arr = np.zeros_like(arr, dtype=np.uint8)
+    cab_arr = np.zeros((h_crop, w_crop, 4), dtype=np.uint8)
     cab_arr[:, :, 0] = r.astype(np.uint8)
     cab_arr[:, :, 1] = g.astype(np.uint8)
     cab_arr[:, :, 2] = b.astype(np.uint8)
@@ -159,9 +171,9 @@ def preparar_imagens_logo(caminho_logo, opacidade_pct=10, mtime_arquivo=0.0):
     caminho_cab = os.path.join(PASTA_BASE, "_temp_logo_header.png")
     Image.fromarray(cab_arr, mode="RGBA").save(caminho_cab, "PNG")
 
-    # 2. Marca d'água com opacidade configurada (padrão 10%)
+    # 2. Marca d'água com opacidade configurada
     fator_opacidade = opacidade_pct / 100.0
-    wm_arr = np.zeros_like(arr, dtype=np.uint8)
+    wm_arr = np.zeros((h_crop, w_crop, 4), dtype=np.uint8)
     wm_arr[:, :, 0] = r.astype(np.uint8)
     wm_arr[:, :, 1] = g.astype(np.uint8)
     wm_arr[:, :, 2] = b.astype(np.uint8)
@@ -170,7 +182,7 @@ def preparar_imagens_logo(caminho_logo, opacidade_pct=10, mtime_arquivo=0.0):
     caminho_wm = os.path.join(PASTA_BASE, "_temp_logo_watermark.png")
     Image.fromarray(wm_arr, mode="RGBA").save(caminho_wm, "PNG")
 
-    return caminho_cab, caminho_wm
+    return caminho_cab, caminho_wm, proporcao_h_w
 
 # ==========================================
 # 5. BARRA LATERAL (IDENTIDADE VISUAL, PREÇOS E ARGON2)
@@ -181,6 +193,14 @@ caminho_logo_atual = localizar_logo()
 opacidade_marca_dagua = st.sidebar.slider(
     "Opacidade da Marca d'Água (%)",
     min_value=5, max_value=30, value=10, step=1
+)
+largura_marca_dagua = st.sidebar.slider(
+    "Tamanho da Marca d'Água na Página (mm)",
+    min_value=100, max_value=205, value=180, step=5
+)
+largura_logo_cabecalho = st.sidebar.slider(
+    "Tamanho da Logo no Cabeçalho (mm)",
+    min_value=20, max_value=45, value=32, step=2
 )
 
 if caminho_logo_atual:
@@ -602,23 +622,29 @@ def limpar_texto_pdf(texto):
     return texto_str.encode("latin-1", "replace").decode("latin-1")
 
 class PropostaPDF(FPDF):
-    def __init__(self, logo_header=None, logo_watermark=None):
+    def __init__(self, logo_header=None, logo_watermark=None, wm_width=180, header_width=32, proporcao_logo=1.0):
         super().__init__(orientation="P", unit="mm", format="A4")
         self.logo_header = logo_header
         self.logo_watermark = logo_watermark
+        self.wm_width = wm_width
+        self.header_width = header_width
+        self.proporcao_logo = proporcao_logo
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self):
         self.set_fill_color(0, 104, 99)
         self.rect(0, 0, 210, 6, style="F")
 
+        altura_logo_cab = self.header_width * self.proporcao_logo
         if self.logo_header and os.path.exists(self.logo_header):
-            self.image(self.logo_header, x=14, y=10, w=26)
-            x_titulo = 44
+            self.image(self.logo_header, x=14, y=9, w=self.header_width)
+            x_titulo = 14 + self.header_width + 5
         else:
             x_titulo = 14
 
-        self.set_xy(x_titulo, 13)
+        y_linha = max(38, int(11 + altura_logo_cab + 3))
+
+        self.set_xy(x_titulo, 14)
         self.set_font("Helvetica", "B", 16)
         self.set_text_color(0, 74, 70)
         self.cell(0, 8, limpar_texto_pdf("PROPOSTA TÉCNICA E COMERCIAL"), ln=1)
@@ -630,12 +656,16 @@ class PropostaPDF(FPDF):
 
         self.set_draw_color(0, 104, 99)
         self.set_line_width(0.4)
-        self.line(14, 36, 196, 36)
-        self.ln(12)
+        self.line(14, y_linha, 196, y_linha)
+        self.set_y(y_linha + 4)
 
     def footer(self):
+        # Centraliza a marca d'água ampliada exatamente no meio da página A4 (210x297 mm)
         if self.logo_watermark and os.path.exists(self.logo_watermark):
-            self.image(self.logo_watermark, x=32, y=75, w=146)
+            x_wm = (210.0 - self.wm_width) / 2.0
+            altura_wm = self.wm_width * self.proporcao_logo
+            y_wm = max(45.0, (297.0 - altura_wm) / 2.0)
+            self.image(self.logo_watermark, x=x_wm, y=y_wm, w=self.wm_width)
 
         self.set_y(-15)
         self.set_draw_color(0, 104, 99)
