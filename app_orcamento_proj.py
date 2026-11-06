@@ -682,23 +682,35 @@ def exportar_bytes_pdf(pdf):
     saida = pdf.output(dest="S")
     return saida.encode("latin-1") if isinstance(saida, str) else bytes(saida)
 
-def gerar_pdf_orcamento(caminho_logo, opacidade_pct):
-    logo_cab, logo_wm = (None, None)
+def gerar_pdf_orcamento(caminho_logo, opacidade_pct, wm_width=180, header_width=32):
+    logo_cab, logo_wm, proporcao_logo = (None, None, 1.0)
     if caminho_logo and os.path.exists(caminho_logo):
         try:
             mtime = os.path.getmtime(caminho_logo)
-            logo_cab, logo_wm = preparar_imagens_logo(caminho_logo, opacidade_pct=opacidade_pct, mtime_arquivo=mtime)
+            resultado_logo = preparar_imagens_logo(
+                caminho_logo, opacidade_pct=opacidade_pct, mtime_arquivo=mtime
+            )
+            logo_cab = resultado_logo[0]
+            logo_wm = resultado_logo[1]
+            proporcao_logo = resultado_logo[2] if len(resultado_logo) > 2 else 1.0
         except Exception as e:
             st.error(f"Erro ao processar a imagem da logo: {e}")
 
-    pdf = PropostaPDF(logo_header=logo_cab, logo_watermark=logo_wm)
+    pdf = PropostaPDF(
+        logo_header=logo_cab,
+        logo_watermark=logo_wm,
+        wm_width=wm_width,
+        header_width=header_width,
+        proporcao_logo=proporcao_logo
+    )
     pdf.add_page()
 
+    y_topo_quadro = pdf.get_y()
     pdf.set_fill_color(234, 244, 243)
     pdf.set_draw_color(0, 104, 99)
-    pdf.rect(14, 40, 182, 24, style="DF")
+    pdf.rect(14, y_topo_quadro, 182, 24, style="DF")
 
-    pdf.set_xy(18, 43)
+    pdf.set_xy(18, y_topo_quadro + 3)
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(0, 74, 70)
     pdf.cell(90, 6, limpar_texto_pdf(f"Cliente: {nome_cliente}"))
@@ -745,7 +757,6 @@ def gerar_pdf_orcamento(caminho_logo, opacidade_pct):
             pdf.set_text_color(150, 70, 70)
             pdf.set_font("Helvetica", "I", 8.5)
             status_curto = "Subtraído do Exec."
-            # Extrai o valor abatido exato para exibir na coluna de valor
             trecho_valor = status_item.replace("Subtraído (", "").replace(")", "")
             texto_valor = f"{trecho_valor}  "
         elif valor_item == 0.0:
@@ -812,7 +823,12 @@ def gerar_pdf_orcamento(caminho_logo, opacidade_pct):
 
 st.header("4. Exportação Comercial")
 if detalhamento:
-    bytes_pdf = gerar_pdf_orcamento(caminho_logo_atual, opacidade_marca_dagua)
+    bytes_pdf = gerar_pdf_orcamento(
+        caminho_logo_atual,
+        opacidade_marca_dagua,
+        globals().get("largura_marca_dagua", 180),
+        globals().get("largura_logo_cabecalho", 32)
+    )
     nome_arq_pdf = f"Proposta_{nome_cliente.strip().replace(' ', '_')}.pdf"
     st.download_button(
         label="📄 Baixar Proposta Comercial em PDF (Com Marca d'Água)",
