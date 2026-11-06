@@ -141,7 +141,7 @@ def preparar_imagens_logo(caminho_logo, opacidade_pct=10, mtime_arquivo=0.0):
     """Processa a logo uma única vez em cache para evitar lentidão ou queda do app a cada clique."""
     img = Image.open(caminho_logo).convert("RGBA")
     # Redimensiona se for muito grande para poupar memória RAM no Streamlit Cloud
-    img.thumbnail((900, 900), Image.Resampling.LANCZOS)
+    img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
     arr = np.array(img, dtype=np.float32)
 
     r, g, b, a = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2], arr[:, :, 3]
