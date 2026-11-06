@@ -10,7 +10,7 @@ from fpdf import FPDF
 # 1. Configuração da página
 st.set_page_config(page_title="Gerador de Orçamentos de Arquitetura", layout="wide")
 
-# 2. Controle de Sessão e Autenticação Definitivo
+# 2. Controle de Sessão e Autenticação
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
@@ -208,12 +208,21 @@ servicos = st.multiselect(
 
 executivo_ativo = "Projeto Executivo" in servicos
 arq_ativo = "Projeto de Arquitetura" in servicos
+ele_ativo = "Proj. Elétrica e Iluminação" in servicos
+hidro_ativo = "Proj. Hidrossanitário" in servicos
 
-if executivo_ativo:
+subtrair_complementares = False
+if executivo_ativo and (ele_ativo or hidro_ativo):
+    subtrair_complementares = st.checkbox(
+        "Subtrair os valores de Elétrica/Iluminação e/ou Hidrossanitário do valor total do Projeto Executivo e cobrá-los separadamente?",
+        value=False,
+        help="Se marcado, o Executivo desconsidera os complementares e você poderá cobrá-los como itens independentes."
+    )
+
+if executivo_ativo and not subtrair_complementares:
     st.info(
         "ℹ️ **Projeto Executivo Selecionado:** Os projetos de **Elétrica/Iluminação** e **Hidrossanitário** "
-        "já estão englobados neste pacote (sem cobrança duplicada) e contam como **3 serviços** no gatilho de desconto. "
-        "O **Projeto de Arquitetura** permanece independente."
+        "estão inclusos neste pacote e contam como **3 serviços** no gatilho de desconto."
     )
 
 cobrar_cortes_fachadas = True
@@ -272,36 +281,48 @@ if "Projeto de Arquitetura" in servicos:
     pontos_desconto += 1.0
     detalhamento.append({"Produto": "Projeto de Arquitetura", "Base": f"{area_total} m²", "Valor (R$)": val, "Status": "Cobrado"})
 
-if "Projeto Executivo" in servicos:
-    val = area_total * p_exec
-    subtotal += val
+# Processamento do Executivo e Complementares com abatimento opcional
+if executivo_ativo:
+    val_exec = area_total * p_exec
     pontos_desconto += 3.0
+    
+    val_ele_calculado = area_total * p_ele
+    val_hidro_calculado = area_molhada * p_hidro
+    
+    if subtrair_complementares:
+        if ele_ativo:
+            val_exec -= val_ele_calculado
+        if hidro_ativo:
+            val_exec -= val_hidro_calculado
+            
+    subtotal += val_exec
     detalhamento.append({
         "Produto": "Projeto Executivo Completo", 
         "Base": f"{area_total} m²", 
-        "Valor (R$)": val, 
-        "Status": "Inclui Detalhamento, Elétrica e Hidrossanitário"
+        "Valor (R$)": val_exec, 
+        "Status": "Abatido de complementares" if subtrair_complementares else "Inclui Detalhamento, Elétrica e Hidrossanitário"
     })
-    detalhamento.append({
-        "Produto": "↳ Proj. Elétrica e Iluminação", 
-        "Base": f"{area_total} m²", 
-        "Valor (R$)": 0.0, 
-        "Status": "Incluso no Projeto Executivo"
-    })
-    detalhamento.append({
-        "Produto": "↳ Proj. Hidrossanitário", 
-        "Base": f"{area_molhada} m² (Área Molhada)", 
-        "Valor (R$)": 0.0, 
-        "Status": "Incluso no Projeto Executivo"
-    })
+    
+    if subtrair_complementares:
+        if ele_ativo:
+            subtotal += val_ele_calculado
+            detalhamento.append({"Produto": "Proj. Elétrica e Iluminação", "Base": f"{area_total} m²", "Valor (R$)": val_ele_calculado, "Status": "Cobrado separadamente"})
+        if hidro_ativo:
+            subtotal += val_hidro_calculado
+            detalhamento.append({"Produto": "Proj. Hidrossanitário", "Base": f"{area_molhada} m² (Área Molhada)", "Valor (R$)": val_hidro_calculado, "Status": "Cobrado separadamente"})
+    else:
+        if ele_ativo:
+            detalhamento.append({"Produto": "↳ Proj. Elétrica e Iluminação", "Base": f"{area_total} m²", "Valor (R$)": 0.0, "Status": "Incluso no Projeto Executivo"})
+        if hidro_ativo:
+            detalhamento.append({"Produto": "↳ Proj. Hidrossanitário", "Base": f"{area_molhada} m² (Área Molhada)", "Valor (R$)": 0.0, "Status": "Incluso no Projeto Executivo"})
 else:
-    if "Proj. Elétrica e Iluminação" in servicos:
+    if ele_ativo:
         val = area_total * p_ele
         subtotal += val
         pontos_desconto += 1.0
         detalhamento.append({"Produto": "Proj. Elétrica e Iluminação", "Base": f"{area_total} m²", "Valor (R$)": val, "Status": "Cobrado"})
 
-    if "Proj. Hidrossanitário" in servicos:
+    if hidro_ativo:
         val = area_molhada * p_hidro
         subtotal += val
         pontos_desconto += 1.0
