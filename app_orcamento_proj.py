@@ -8,7 +8,6 @@ from datetime import datetime
 from PIL import Image
 from fpdf import FPDF
 
-# Importação segura do Argon2 (com fallback caso o servidor ainda esteja instalando o requirements.txt)
 try:
     from argon2 import PasswordHasher
     from argon2.exceptions import VerifyMismatchError, InvalidHashError
@@ -18,7 +17,7 @@ except ImportError:
     ARGON2_DISPONIVEL = False
     ph = None
 
-# 1. Configuração da página (sempre o primeiro comando Streamlit)
+# 1. Configuração da página
 st.set_page_config(page_title="Gerador de Orçamentos de Arquitetura", layout="wide")
 
 # ==========================================
@@ -34,10 +33,8 @@ def validar_credencial_argon2(senha_digitada: str) -> bool:
 
     if ARGON2_DISPONIVEL and ph is not None:
         try:
-            # Se o segredo salvo no Streamlit Secrets já for um hash Argon2 ($argon2id$...)
             if segredo.startswith("$argon2"):
                 return ph.verify(segredo, senha_digitada)
-            # Se o segredo salvo for texto plano, gera o hash Argon2 em memória e verifica com segurança
             hash_temporario = ph.hash(segredo)
             return ph.verify(hash_temporario, senha_digitada)
         except (VerifyMismatchError, InvalidHashError):
@@ -45,7 +42,6 @@ def validar_credencial_argon2(senha_digitada: str) -> bool:
         except Exception:
             return False
 
-    # Fallback em tempo constante caso argon2-cffi ainda não tenha sido instalado no container
     return hmac.compare_digest(senha_digitada, segredo)
 
 if "autenticado" not in st.session_state:
@@ -74,7 +70,7 @@ ARQUIVO_PRECOS = os.path.join(PASTA_BASE, "config_precos.json")
 PRECOS_PADRAO = {
     "p_lev_seca": 5.0,
     "p_lev_molhada": 10.0,
-    "p_cad": 7.0,
+    "p_cad": 10.0,
     "p_cortes": 10.0,
     "p_fachadas": 10.0,
     "p_arq": 20.0,
@@ -134,7 +130,7 @@ def listar_logos_disponiveis():
 
 @st.cache_data(show_spinner=False)
 def preparar_imagem_individual(caminho_img, opacidade_pct=100, prefixo="header", mtime_arquivo=0.0):
-    """Remove o fundo branco, recorta as margens vazias e aplica a opacidade desejada (100% cabeçalho ou X% marca d'água)."""
+    """Remove o fundo branco, recorta as margens vazias e aplica a opacidade desejada para cada logo separadamente."""
     img = Image.open(caminho_img).convert("RGBA")
     img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
     arr = np.array(img, dtype=np.float32)
@@ -144,7 +140,7 @@ def preparar_imagem_individual(caminho_img, opacidade_pct=100, prefixo="header",
     brilho_min = np.minimum(np.minimum(r, g), b)
     mascara_logo = np.clip((248.0 - brilho_min) / 45.0, 0.0, 1.0) * (a / 255.0)
 
-    # Recorte automático das bordas vazias
+    # Recorte automático das bordas brancas/vazias
     ys, xs = np.where(mascara_logo > 0.05)
     if len(xs) > 0 and len(ys) > 0:
         y_min, y_max = max(0, int(ys.min()) - 4), min(arr.shape[0], int(ys.max()) + 5)
@@ -170,7 +166,7 @@ def preparar_imagem_individual(caminho_img, opacidade_pct=100, prefixo="header",
     return caminho_saida, proporcao_h_w
 
 # ==========================================
-# 5. BARRA LATERAL (DUAS LOGOS INDEPENDENTES + PREÇOS)
+# 5. BARRA LATERAL (DUAS LOGOS INDEPENDENTES + PREÇOS + ARGON2)
 # ==========================================
 st.sidebar.header("🎨 Identidade Visual do PDF")
 logos_pasta = listar_logos_disponiveis()
@@ -231,7 +227,7 @@ st.sidebar.header("💰 Tabela de Preços (R$/un ou m²)")
 
 p_lev_seca = st.sidebar.number_input("Levantamento - Seca (m²)", value=float(precos_atuais["p_lev_seca"]), step=1.0)
 p_lev_molhada = st.sidebar.number_input("Levantamento - Molhada (m²)", value=float(precos_atuais["p_lev_molhada"]), step=1.0)
-p_cad = st.sidebar.number_input("Desenho Levantamento CAD (m²)", value=float(precos_atuais["p_cad"]), step=1.0)
+p_cad = st.sidebar.number_input("Desenho CAD (m²)", value=float(precos_atuais["p_cad"]), step=1.0)
 p_cortes = st.sidebar.number_input("Cortes Avulsos (m²)", value=float(precos_atuais["p_cortes"]), step=1.0)
 p_fachadas = st.sidebar.number_input("Fachadas Avulsas (m²)", value=float(precos_atuais["p_fachadas"]), step=1.0)
 p_arq = st.sidebar.number_input("Projeto de Arquitetura (m²)", value=float(precos_atuais["p_arq"]), step=1.0)
@@ -304,7 +300,7 @@ st.header("2. Escopo do Orçamento")
 
 OPCOES_SERVICOS = [
     "Levantamento Técnico",
-    "Desenho Levantamento CAD",
+    "Desenho CAD",
     "Cortes",
     "Fachadas",
     "Projeto de Arquitetura",
@@ -327,7 +323,6 @@ arq_ativo = "Projeto de Arquitetura" in servicos
 ele_selecionado = "Proj. Elétrica e Iluminação" in servicos
 hidro_selecionado = "Proj. Hidrossanitário" in servicos
 
-# Pré-cálculo dos valores do Executivo e complementares para exibir nas opções de subtração
 val_exec_bruto = area_total * p_exec
 val_ele_calc = area_total * p_ele
 val_hidro_calc = area_molhada * p_hidro
@@ -392,12 +387,12 @@ if "Levantamento Técnico" in servicos:
         "Status": "Cobrado"
     })
 
-if "Desenho Levantamento CAD" in servicos:
+if "Desenho CAD" in servicos:
     val = area_total * p_cad
     subtotal += val
     pontos_desconto += 1.0
     detalhamento.append({
-        "Produto": "Desenho Levantamento CAD (Digitalização)",
+        "Produto": "Desenho CAD (Digitalização)",
         "Base": f"{area_total:g} m²",
         "Valor (R$)": val,
         "Status": "Cobrado"
@@ -452,13 +447,11 @@ if "Projeto de Arquitetura" in servicos:
         "Status": "Cobrado"
     })
 
-# Regra do Projeto Executivo com opção de subtrair Elétrica e/ou Hidrossanitário
 if executivo_ativo:
     abatimento_total = (val_ele_calc if subtrair_eletrica else 0.0) + (val_hidro_calc if subtrair_hidro else 0.0)
     val_exec_liquido = max(0.0, val_exec_bruto - abatimento_total)
     subtotal += val_exec_liquido
 
-    # Pontuação proporcional: 3 pts completo, reduzindo 1 pt por complementar subtraído
     pontos_exec = 3.0 - (1.0 if subtrair_eletrica else 0.0) - (1.0 if subtrair_hidro else 0.0)
     pontos_desconto += max(1.0, pontos_exec)
 
@@ -476,7 +469,6 @@ if executivo_ativo:
         "Status": status_exec
     })
 
-    # Linha informativa de Elétrica e Iluminação dentro do Executivo
     if subtrair_eletrica:
         detalhamento.append({
             "Produto": "↳ (-) Proj. Elétrica e Iluminação",
@@ -492,7 +484,6 @@ if executivo_ativo:
             "Status": "Incluso no Projeto Executivo"
         })
 
-    # Linha informativa de Hidrossanitário dentro do Executivo
     if subtrair_hidro:
         detalhamento.append({
             "Produto": "↳ (-) Proj. Hidrossanitário",
@@ -508,7 +499,6 @@ if executivo_ativo:
             "Status": "Incluso no Projeto Executivo"
         })
 else:
-    # Quando Projeto Executivo NÃO está marcado, Elétrica e Hidrossanitário funcionam de forma avulsa normal
     if ele_selecionado:
         subtotal += val_ele_calc
         pontos_desconto += 1.0
@@ -618,7 +608,7 @@ condicoes_pagto = st.text_area(
 )
 
 # ==========================================
-# 10. GERADOR DE PDF PROFISSIONAL COM MARCA D'ÁGUA
+# 10. GERADOR DE PDF COM DUAS LOGOS INDEPENDENTES
 # ==========================================
 def limpar_texto_pdf(texto):
     substituicoes = {"↳": "->", "•": "-", "—": "-", "–": "-", "➖": "-"}
@@ -628,20 +618,29 @@ def limpar_texto_pdf(texto):
     return texto_str.encode("latin-1", "replace").decode("latin-1")
 
 class PropostaPDF(FPDF):
-    def __init__(self, logo_header=None, logo_watermark=None, wm_width=180, header_width=32, proporcao_logo=1.0):
+    def __init__(
+        self,
+        logo_header=None,
+        logo_watermark=None,
+        wm_width=180,
+        header_width=32,
+        prop_cab=1.0,
+        prop_wm=1.0
+    ):
         super().__init__(orientation="P", unit="mm", format="A4")
         self.logo_header = logo_header
         self.logo_watermark = logo_watermark
         self.wm_width = wm_width
         self.header_width = header_width
-        self.proporcao_logo = proporcao_logo
+        self.prop_cab = prop_cab
+        self.prop_wm = prop_wm
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self):
         self.set_fill_color(0, 104, 99)
         self.rect(0, 0, 210, 6, style="F")
 
-        altura_logo_cab = self.header_width * self.proporcao_logo
+        altura_logo_cab = self.header_width * self.prop_cab
         if self.logo_header and os.path.exists(self.logo_header):
             self.image(self.logo_header, x=14, y=9, w=self.header_width)
             x_titulo = 14 + self.header_width + 5
@@ -666,10 +665,9 @@ class PropostaPDF(FPDF):
         self.set_y(y_linha + 4)
 
     def footer(self):
-        # Centraliza a marca d'água ampliada exatamente no meio da página A4 (210x297 mm)
         if self.logo_watermark and os.path.exists(self.logo_watermark):
             x_wm = (210.0 - self.wm_width) / 2.0
-            altura_wm = self.wm_width * self.proporcao_logo
+            altura_wm = self.wm_width * self.prop_wm
             y_wm = max(45.0, (297.0 - altura_wm) / 2.0)
             self.image(self.logo_watermark, x=x_wm, y=y_wm, w=self.wm_width)
 
@@ -688,26 +686,34 @@ def exportar_bytes_pdf(pdf):
     saida = pdf.output(dest="S")
     return saida.encode("latin-1") if isinstance(saida, str) else bytes(saida)
 
-def gerar_pdf_orcamento(caminho_logo, opacidade_pct, wm_width=180, header_width=32):
-    logo_cab, logo_wm, proporcao_logo = (None, None, 1.0)
-    if caminho_logo and os.path.exists(caminho_logo):
+def gerar_pdf_orcamento(caminho_cab, caminho_wm, opacidade_pct, wm_width=180, header_width=32):
+    logo_cab, prop_cab = (None, 1.0)
+    if caminho_cab and os.path.exists(caminho_cab):
         try:
-            mtime = os.path.getmtime(caminho_logo)
-            resultado_logo = preparar_imagens_logo(
-                caminho_logo, opacidade_pct=opacidade_pct, mtime_arquivo=mtime
+            mtime_cab = os.path.getmtime(caminho_cab)
+            logo_cab, prop_cab = preparar_imagem_individual(
+                caminho_cab, opacidade_pct=100, prefixo="header", mtime_arquivo=mtime_cab
             )
-            logo_cab = resultado_logo[0]
-            logo_wm = resultado_logo[1]
-            proporcao_logo = resultado_logo[2] if len(resultado_logo) > 2 else 1.0
         except Exception as e:
-            st.error(f"Erro ao processar a imagem da logo: {e}")
+            st.error(f"Erro ao processar a logo do cabeçalho: {e}")
+
+    logo_wm, prop_wm = (None, 1.0)
+    if caminho_wm and os.path.exists(caminho_wm):
+        try:
+            mtime_wm = os.path.getmtime(caminho_wm)
+            logo_wm, prop_wm = preparar_imagem_individual(
+                caminho_wm, opacidade_pct=opacidade_pct, prefixo="watermark", mtime_arquivo=mtime_wm
+            )
+        except Exception as e:
+            st.error(f"Erro ao processar a logo da marca d'água: {e}")
 
     pdf = PropostaPDF(
         logo_header=logo_cab,
         logo_watermark=logo_wm,
         wm_width=wm_width,
         header_width=header_width,
-        proporcao_logo=proporcao_logo
+        prop_cab=prop_cab,
+        prop_wm=prop_wm
     )
     pdf.add_page()
 
