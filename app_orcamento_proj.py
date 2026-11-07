@@ -109,12 +109,12 @@ def formatar_moeda(valor):
 precos_atuais = carregar_precos()
 
 # ==========================================
-# 4. LOCALIZADOR E PROCESSAMENTO EM CACHE DA LOGO
+# 4. LOCALIZADOR E RECORTE INDIVIDUAL DE LOGOS
 # ==========================================
-def localizar_logo():
+def listar_logos_disponiveis():
     extensoes_validas = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
-    candidatos_prioritarios = []
-    outros_candidatos = []
+    prioritarios = []
+    outros = []
 
     for raiz, _, arquivos in os.walk(PASTA_BASE):
         if ".git" in raiz:
@@ -124,22 +124,18 @@ def localizar_logo():
             if nome_lower.startswith("_temp_"):
                 continue
             if nome_lower.endswith(extensoes_validas):
-                caminho_completo = os.path.join(raiz, arq)
-                if "arq" in nome_lower or "logo" in nome_lower:
-                    candidatos_prioritarios.append(caminho_completo)
+                caminho_rel = os.path.relpath(os.path.join(raiz, arq), PASTA_BASE)
+                if "arq" in nome_lower or "logo" in nome_lower or "cab" in nome_lower or "marca" in nome_lower:
+                    prioritarios.append(caminho_rel)
                 else:
-                    outros_candidatos.append(caminho_completo)
+                    outros.append(caminho_rel)
 
-    if candidatos_prioritarios:
-        return candidatos_prioritarios[0]
-    if outros_candidatos:
-        return outros_candidatos[0]
-    return None
+    return sorted(prioritarios) + sorted(outros)
 
 @st.cache_data(show_spinner=False)
-def preparar_imagens_logo(caminho_logo, opacidade_pct=10, mtime_arquivo=0.0):
-    """Remove o fundo branco, recorta as margens vazias para maximizar a logo e gera cabeçalho + marca d'água."""
-    img = Image.open(caminho_logo).convert("RGBA")
+def preparar_imagem_individual(caminho_img, opacidade_pct=100, prefixo="header", mtime_arquivo=0.0):
+    """Remove o fundo branco, recorta as margens vazias e aplica a opacidade desejada (100% cabeçalho ou X% marca d'água)."""
+    img = Image.open(caminho_img).convert("RGBA")
     img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
     arr = np.array(img, dtype=np.float32)
 
@@ -148,7 +144,7 @@ def preparar_imagens_logo(caminho_logo, opacidade_pct=10, mtime_arquivo=0.0):
     brilho_min = np.minimum(np.minimum(r, g), b)
     mascara_logo = np.clip((248.0 - brilho_min) / 45.0, 0.0, 1.0) * (a / 255.0)
 
-    # Recorta automaticamente toda a margem branca/transparente ao redor do desenho da logo
+    # Recorte automático das bordas vazias
     ys, xs = np.where(mascara_logo > 0.05)
     if len(xs) > 0 and len(ys) > 0:
         y_min, y_max = max(0, int(ys.min()) - 4), min(arr.shape[0], int(ys.max()) + 5)
@@ -161,34 +157,65 @@ def preparar_imagens_logo(caminho_logo, opacidade_pct=10, mtime_arquivo=0.0):
     h_crop, w_crop = mascara_logo.shape
     proporcao_h_w = h_crop / float(w_crop) if w_crop > 0 else 1.0
 
-    # 1. Cabeçalho nítido sem fundo branco
-    cab_arr = np.zeros((h_crop, w_crop, 4), dtype=np.uint8)
-    cab_arr[:, :, 0] = r.astype(np.uint8)
-    cab_arr[:, :, 1] = g.astype(np.uint8)
-    cab_arr[:, :, 2] = b.astype(np.uint8)
-    cab_arr[:, :, 3] = (mascara_logo * 255.0).astype(np.uint8)
-
-    caminho_cab = os.path.join(PASTA_BASE, "_temp_logo_header.png")
-    Image.fromarray(cab_arr, mode="RGBA").save(caminho_cab, "PNG")
-
-    # 2. Marca d'água com opacidade configurada
     fator_opacidade = opacidade_pct / 100.0
-    wm_arr = np.zeros((h_crop, w_crop, 4), dtype=np.uint8)
-    wm_arr[:, :, 0] = r.astype(np.uint8)
-    wm_arr[:, :, 1] = g.astype(np.uint8)
-    wm_arr[:, :, 2] = b.astype(np.uint8)
-    wm_arr[:, :, 3] = (mascara_logo * 255.0 * fator_opacidade).astype(np.uint8)
+    out_arr = np.zeros((h_crop, w_crop, 4), dtype=np.uint8)
+    out_arr[:, :, 0] = r.astype(np.uint8)
+    out_arr[:, :, 1] = g.astype(np.uint8)
+    out_arr[:, :, 2] = b.astype(np.uint8)
+    out_arr[:, :, 3] = (mascara_logo * 255.0 * fator_opacidade).astype(np.uint8)
 
-    caminho_wm = os.path.join(PASTA_BASE, "_temp_logo_watermark.png")
-    Image.fromarray(wm_arr, mode="RGBA").save(caminho_wm, "PNG")
+    caminho_saida = os.path.join(PASTA_BASE, f"_temp_logo_{prefixo}.png")
+    Image.fromarray(out_arr, mode="RGBA").save(caminho_saida, "PNG")
 
-    return caminho_cab, caminho_wm, proporcao_h_w
+    return caminho_saida, proporcao_h_w
 
 # ==========================================
-# 5. BARRA LATERAL (IDENTIDADE VISUAL, PREÇOS E ARGON2)
+# 5. BARRA LATERAL (DUAS LOGOS INDEPENDENTES + PREÇOS)
 # ==========================================
 st.sidebar.header("🎨 Identidade Visual do PDF")
-caminho_logo_atual = localizar_logo()
+logos_pasta = listar_logos_disponiveis()
+opcoes_selecao_logo = ["(Nenhuma)"] + logos_pasta
+
+# --- 5.1 Logo do Cabeçalho ---
+st.sidebar.subheader("1. Logo do Cabeçalho")
+idx_padrao_cab = 1 if len(opcoes_selecao_logo) > 1 else 0
+escolha_cab = st.sidebar.selectbox("Arquivo do Cabeçalho:", opcoes_selecao_logo, index=idx_padrao_cab, key="sel_logo_cab")
+upload_cab = st.sidebar.file_uploader("Ou envie outra p/ Cabeçalho:", type=["png", "jpg", "jpeg", "webp"], key="up_logo_cab")
+
+if upload_cab is not None:
+    caminho_logo_cab = os.path.join(PASTA_BASE, "logo_cabecalho_custom.png")
+    Image.open(upload_cab).save(caminho_logo_cab, "PNG")
+elif escolha_cab != "(Nenhuma)":
+    caminho_logo_cab = os.path.join(PASTA_BASE, escolha_cab)
+else:
+    caminho_logo_cab = None
+
+if caminho_logo_cab and os.path.exists(caminho_logo_cab):
+    st.sidebar.image(caminho_logo_cab, caption="Prévia: Cabeçalho", width=100)
+
+largura_logo_cabecalho = st.sidebar.slider(
+    "Tamanho da Logo no Cabeçalho (mm)",
+    min_value=15, max_value=55, value=32, step=1
+)
+
+st.sidebar.markdown("---")
+
+# --- 5.2 Logo da Marca d'Água ---
+st.sidebar.subheader("2. Logo da Marca d'Água")
+idx_padrao_wm = 2 if len(opcoes_selecao_logo) > 2 else idx_padrao_cab
+escolha_wm = st.sidebar.selectbox("Arquivo da Marca d'Água:", opcoes_selecao_logo, index=idx_padrao_wm, key="sel_logo_wm")
+upload_wm = st.sidebar.file_uploader("Ou envie outra p/ Marca d'Água:", type=["png", "jpg", "jpeg", "webp"], key="up_logo_wm")
+
+if upload_wm is not None:
+    caminho_logo_wm = os.path.join(PASTA_BASE, "logo_marcadagua_custom.png")
+    Image.open(upload_wm).save(caminho_logo_wm, "PNG")
+elif escolha_wm != "(Nenhuma)":
+    caminho_logo_wm = os.path.join(PASTA_BASE, escolha_wm)
+else:
+    caminho_logo_wm = None
+
+if caminho_logo_wm and os.path.exists(caminho_logo_wm):
+    st.sidebar.image(caminho_logo_wm, caption="Prévia: Marca d'Água", width=100)
 
 opacidade_marca_dagua = st.sidebar.slider(
     "Opacidade da Marca d'Água (%)",
@@ -198,27 +225,6 @@ largura_marca_dagua = st.sidebar.slider(
     "Tamanho da Marca d'Água na Página (mm)",
     min_value=100, max_value=205, value=180, step=5
 )
-largura_logo_cabecalho = st.sidebar.slider(
-    "Tamanho da Logo no Cabeçalho (mm)",
-    min_value=20, max_value=45, value=32, step=2
-)
-
-if caminho_logo_atual:
-    st.sidebar.success(f"Logo ativa: `{os.path.basename(caminho_logo_atual)}`")
-    st.sidebar.image(caminho_logo_atual, width=120)
-else:
-    st.sidebar.warning("⚠️ Nenhuma imagem de logo encontrada na pasta do GitHub.")
-
-arquivo_upload_logo = st.sidebar.file_uploader(
-    "Enviar ou substituir Logo (PNG/JPG)",
-    type=["png", "jpg", "jpeg"]
-)
-if arquivo_upload_logo is not None:
-    caminho_salvo = os.path.join(PASTA_BASE, "arq.png")
-    img_up = Image.open(arquivo_upload_logo)
-    img_up.save(caminho_salvo, "PNG")
-    caminho_logo_atual = caminho_salvo
-    st.sidebar.success("Logo salva! Ela já sairá no PDF.")
 
 st.sidebar.divider()
 st.sidebar.header("💰 Tabela de Preços (R$/un ou m²)")
