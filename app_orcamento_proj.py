@@ -830,10 +830,11 @@ def gerar_pdf_orcamento(caminho_logo, opacidade_pct, wm_width=180, header_width=
 st.header("4. Exportação Comercial")
 if detalhamento:
     bytes_pdf = gerar_pdf_orcamento(
-        caminho_logo_atual,
+        caminho_logo_cab,
+        caminho_logo_wm,
         opacidade_marca_dagua,
-        globals().get("largura_marca_dagua", 180),
-        globals().get("largura_logo_cabecalho", 32)
+        largura_marca_dagua,
+        largura_logo_cabecalho
     )
     nome_arq_pdf = f"Proposta_{nome_cliente.strip().replace(' ', '_')}.pdf"
     st.download_button(
